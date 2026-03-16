@@ -25,14 +25,15 @@ class TestWCAGCheck(StandardToolTests):
         tool = self._make_tool()
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
-            bp = browser.new_page()
-            bp.set_content(FIXTURE_HTML)
+            try:
+                bp = browser.new_page()
+                bp.set_content(FIXTURE_HTML)
 
-            page = PageContext(url=bp.url, html=FIXTURE_HTML)
-            page._browser_page = bp
-            issues = tool.analyze(page)
-
-            browser.close()
+                page = PageContext(url=bp.url, html=FIXTURE_HTML)
+                page._browser_page = bp
+                issues = tool.analyze(page)
+            finally:
+                browser.close()
         return issues
 
     def test_analyze_returns_list_of_issues(self):

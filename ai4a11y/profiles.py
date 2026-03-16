@@ -49,7 +49,6 @@ PROFILES: dict[str, AbilityProfile] = {
         description="Color vision deficiency",
         needs=["no_color_only", "patterns", "labels"],
         preferred_modalities=["visual"],
-        parent="blv",
     ),
     # Hearing
     "dhh": AbilityProfile(

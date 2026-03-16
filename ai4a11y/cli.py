@@ -231,12 +231,12 @@ def _print_adapt_result(result: AuditResult, profile: str):
         table.add_column("Original", width=25)
         table.add_column("Replacement", width=30)
 
-        for adapt in result.adaptations:
+        for adaptation in result.adaptations:
             table.add_row(
-                adapt.action,
-                adapt.element.selector[:30],
-                adapt.original[:25] if adapt.original else "",
-                adapt.replacement[:30] if adapt.replacement else "",
+                adaptation.action,
+                adaptation.element.selector[:30],
+                adaptation.original[:25] if adaptation.original else "",
+                adaptation.replacement[:30] if adaptation.replacement else "",
             )
 
         console.print(table)

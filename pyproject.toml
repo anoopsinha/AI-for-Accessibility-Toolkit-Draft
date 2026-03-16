@@ -44,6 +44,11 @@ dev = [
 [project.scripts]
 a11y = "ai4a11y.cli:main"
 
+[tool.pytest.ini_options]
+markers = [
+    "network: marks tests that require external network access (deselect with '-m not network')",
+]
+
 [tool.setuptools.packages.find]
 include = ["ai4a11y*"]
 

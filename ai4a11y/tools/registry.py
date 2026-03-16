@@ -88,6 +88,12 @@ class ToolRegistry:
         for tool in self._tools.values():
             tool.teardown()
 
+    def reset(self) -> None:
+        """Reset registry state. Useful for test isolation."""
+        self._tools.clear()
+        self._transforms.clear()
+        self._discovered = False
+
 
 # Global registry
 _registry = ToolRegistry()

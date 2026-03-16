@@ -87,8 +87,15 @@ class LLMClient:
         # Strip markdown code fences if the model includes them anyway
         text = result.strip()
         if text.startswith("```"):
-            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-        return json.loads(text)
+            lines = text.split("\n", 1)
+            text = lines[1] if len(lines) > 1 else ""
+            text = text.rsplit("```", 1)[0].strip()
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                f"LLM returned invalid JSON: {e}\nRaw response: {text[:200]}"
+            ) from e
 
     # ── Provider implementations ────────────────────────────────────
 
@@ -115,7 +122,10 @@ class LLMClient:
                 {"role": "user", "content": prompt},
             ],
         )
-        return response.choices[0].message.content
+        content = response.choices[0].message.content
+        if content is None:
+            raise ValueError("OpenAI returned no content")
+        return content
 
     def _complete_google(self, system: str, prompt: str) -> str:
         from google import genai

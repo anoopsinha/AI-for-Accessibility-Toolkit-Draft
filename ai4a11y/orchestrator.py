@@ -60,84 +60,91 @@ class Orchestrator:
 
         plan = {}
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            browser_page = browser.new_page()
-            browser_page.goto(self.app_agent.url, wait_until="domcontentloaded")
-
-            # 1. Understand the page (AppAgent parses + LLM analysis)
-            page = self.app_agent.parse(browser_page=browser_page)
-            page._browser_page = browser_page
-
-            # 2. Discover available tools
-            all_issues = []
-            all_adaptations = []
-            tools_run = []
-
-            wcag = WCAGCheckTool()
-
-            registry = get_registry()
-            registry.discover()
-            profile = self.user_agent.profile if self.user_agent else None
-
-            # Collect all available tools (excluding built-in wcag which always runs)
-            available_tools = [
-                t for t in registry.tools.values() if t.name != wcag.name
-            ]
-
-            # 3. Plan — LLM decides which tools to run
-            if profile and available_tools:
+        registry = get_registry()
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
                 try:
-                    plan = self._plan(page, profile, available_tools)
-                    selected_names = set(plan.get("tools_to_run", []))
-                    tools_to_run = [
-                        t for t in available_tools
-                        if t.name in selected_names
-                        or (not t.ability_profiles and t.name not in selected_names)
+                    browser_page = browser.new_page()
+                    browser_page.goto(self.app_agent.url, wait_until="domcontentloaded")
+
+                    # 1. Understand the page (AppAgent parses + LLM analysis)
+                    page = self.app_agent.parse(browser_page=browser_page)
+                    page._browser_page = browser_page
+
+                    # 2. Discover available tools
+                    all_issues = []
+                    all_adaptations = []
+                    tools_run = []
+
+                    wcag = WCAGCheckTool()
+
+                    registry.discover()
+                    profile = self.user_agent.profile if self.user_agent else None
+
+                    # Collect all available tools (excluding built-in wcag which always runs)
+                    available_tools = [
+                        t for t in registry.tools.values() if t.name != wcag.name
                     ]
-                except Exception as e:
-                    logger.warning("LLM planning failed, falling back to rule-based: %s", e)
-                    tools_to_run = self._filter_by_profile(available_tools, profile)
-            else:
-                tools_to_run = self._filter_by_profile(available_tools, profile)
 
-            # 4. Run built-in WCAG check (always)
-            issues = wcag.analyze(page)
-            all_issues.extend(issues)
-            tools_run.append(wcag.name)
+                    # 3. Plan — LLM decides which tools to run
+                    if profile and available_tools:
+                        try:
+                            plan = self._plan(page, profile, available_tools)
+                            selected_names = set(plan.get("tools_to_run", []))
+                            tools_to_run = [
+                                t for t in available_tools
+                                if t.name in selected_names
+                                or (not t.ability_profiles and t.name not in selected_names)
+                            ]
+                        except Exception as e:
+                            logger.warning("LLM planning failed, falling back to rule-based: %s", e)
+                            tools_to_run = self._filter_by_profile(available_tools, profile)
+                    else:
+                        tools_to_run = self._filter_by_profile(available_tools, profile)
 
-            # 5. Run selected tools
-            active_tools = []
-            for tool in tools_to_run:
-                issues = tool.analyze(page)
-                all_issues.extend(issues)
-                tools_run.append(tool.name)
-                active_tools.append(tool)
+                    # 4. Run built-in WCAG check (always)
+                    issues = wcag.analyze(page)
+                    all_issues.extend(issues)
+                    tools_run.append(wcag.name)
 
-            # 6. Generate adaptations via AdaptAgent
-            if profile:
-                adapt_agent = self.adapt_agent or AdaptAgent(llm=self.llm)
-                adaptations = adapt_agent.adapt_with_tools(
-                    page, profile, active_tools, issues=all_issues,
-                )
-                all_adaptations.extend(adaptations)
+                    # 5. Run selected tools
+                    active_tools = []
+                    for tool in tools_to_run:
+                        issues = tool.analyze(page)
+                        all_issues.extend(issues)
+                        tools_run.append(tool.name)
+                        active_tools.append(tool)
 
-                # 7. Run modality transforms on page elements
-                for element in page.elements:
-                    for transform, result in adapt_agent.transform(element, profile):
-                        all_adaptations.append(Adaptation(
-                            element=element,
-                            action=f"transform:{transform.name}",
-                            original=transform.source_modality,
-                            replacement=result.content if isinstance(result.content, str) else f"[{result.content_type}]",
-                            tool_name=transform.name,
-                        ))
+                    # 6. Generate adaptations via AdaptAgent
+                    if profile:
+                        adapt_agent = self.adapt_agent or AdaptAgent(llm=self.llm)
+                        try:
+                            adaptations = adapt_agent.adapt_with_tools(
+                                page, profile, active_tools, issues=all_issues,
+                            )
+                        except Exception as e:
+                            logger.warning("Adaptation failed, continuing with empty adaptations: %s", e)
+                            adaptations = []
+                        all_adaptations.extend(adaptations)
 
-            browser.close()
+                        # 7. Run modality transforms on page elements
+                        for element in page.elements:
+                            for transform, result in adapt_agent.transform(element, profile):
+                                all_adaptations.append(Adaptation(
+                                    element=element,
+                                    action=f"transform:{transform.name}",
+                                    original=transform.source_modality,
+                                    replacement=result.content if isinstance(result.content, str) else f"[{result.content_type}]",
+                                    tool_name=transform.name,
+                                ))
+                finally:
+                    browser.close()
 
-        # Clean up
-        registry.teardown_all()
-        page._browser_page = None
+            # Clean up browser page reference
+            page._browser_page = None
+        finally:
+            registry.teardown_all()
 
         # Sort issues by severity
         severity_order = {"critical": 0, "serious": 1, "moderate": 2, "minor": 3}

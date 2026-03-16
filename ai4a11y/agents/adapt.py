@@ -9,11 +9,14 @@ evaluates whether the adaptations actually help.
 from __future__ import annotations
 
 import json
+import logging
 
 from ai4a11y.models import Adaptation, Element, Issue, PageContext, TransformResult
 from ai4a11y.tools.base import BaseTool, BaseTransform
 from ai4a11y.tools.registry import get_registry
 from ai4a11y.profiles import AbilityProfile
+
+logger = logging.getLogger(__name__)
 
 
 class AdaptAgent:
@@ -54,7 +57,11 @@ class AdaptAgent:
 
         # With LLM: prioritize and resolve conflicts
         if self.llm:
-            return self._prioritize(all_adaptations, issues or [], profile, page)
+            try:
+                return self._prioritize(all_adaptations, issues or [], profile, page)
+            except Exception as e:
+                logger.warning("LLM prioritization failed, returning unordered: %s", e)
+                return all_adaptations
 
         return all_adaptations
 

@@ -11,6 +11,7 @@ Two base classes:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import ClassVar
 
 from ai4a11y.models import Adaptation, Element, Issue, PageContext, TransformResult
 from ai4a11y.profiles import AbilityProfile
@@ -21,6 +22,9 @@ class BaseTool(ABC):
 
     Implement `analyze()` to detect accessibility issues on a page.
     Optionally implement `adapt()` to suggest or apply fixes.
+
+    Subclasses must override `ability_profiles` and `wcag_criteria`
+    with new lists — never mutate the defaults in-place.
 
     Example:
         class AltTextTool(BaseTool):
@@ -43,10 +47,10 @@ class BaseTool(ABC):
                 return issues
     """
 
-    name: str = ""
-    description: str = ""
-    ability_profiles: list[str] = []
-    wcag_criteria: list[str] = []
+    name: ClassVar[str] = ""
+    description: ClassVar[str] = ""
+    ability_profiles: ClassVar[list[str]] = []
+    wcag_criteria: ClassVar[list[str]] = []
 
     @abstractmethod
     def analyze(self, page: PageContext) -> list[Issue]:

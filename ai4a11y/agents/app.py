@@ -41,10 +41,12 @@ class AppAgent:
 
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-            page.goto(self.url, wait_until="domcontentloaded")
-            result = self._extract(page)
-            browser.close()
+            try:
+                page = browser.new_page()
+                page.goto(self.url, wait_until="domcontentloaded")
+                result = self._extract(page)
+            finally:
+                browser.close()
 
         return result
 
