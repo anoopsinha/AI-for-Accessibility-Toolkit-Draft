@@ -2,7 +2,7 @@
 
 **Code:** [https://github.com/paradigms-of-intelligence/ai-for-accessibility](https://github.com/paradigms-of-intelligence/ai-for-accessibility)  
 **Team:** Google (Anoop Sinha, Liz Jenkins, Shruti Sheth, Shaun Kane, Philip Nelson, Renelito Delos Santos, Sam Sepah, Alexander Hauerslev Jensen)  
-**Contact:** anoopsinha@google.com
+**Contact:** Anoop Sinha, anoop.k.sinha@gmail.com
 
 ## **What it does**
 
