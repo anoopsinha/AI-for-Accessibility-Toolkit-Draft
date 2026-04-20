@@ -1,4 +1,3 @@
-```markdown
 # **Natively Adaptive Interfaces (NAI)**
 
 **Code:** [https://github.com/paradigms-of-intelligence/ai-for-accessibility](https://github.com/paradigms-of-intelligence/ai-for-accessibility)  
