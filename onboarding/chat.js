@@ -20,6 +20,7 @@
 
 import { createController } from '/controller/lib/createController.js';
 import { createDomReceiver } from '/controller/lib/web/dom-receiver.js';
+import { createIframeReceiver } from '/controller/lib/web/iframe-receiver.js';
 import { websocketChannel, remoteControl } from '/controller/lib/transport/remote.js';
 import { createLlmLane } from '/controller/lib/llm-lane.js';
 import { parse } from '/controller/lib/grammar.js';
@@ -165,8 +166,68 @@ function setConnStatus(state, url) {
   }
 }
 
+// ── iframe mode (screen reader on a hosted VM) ───────────────────────────────
+// The page under test renders HERE rather than behind CDP, so the chat and the
+// page share one accessibility tree and NVDA/JAWS can move between them.
+const FRAME_KEY = 'aa-chat-frame';
+let framedReceiver = null;
+
+// In this mode the tester reads the chat and the page in one document tree, so a
+// visual setting that reaches only the frame leaves the chat unadapted beside
+// it. Mirror every apply/undo onto the local receiver too — which drives the
+// demo preview and, through the surface mirror, the chat window itself.
+function alsoAdaptTheChat(port) {
+  return {
+    ...port,
+    async applySettings(changes, scope) {
+      const r = await port.applySettings(changes, scope);
+      try { await localReceiver.applySettings(changes, scope); } catch {}
+      return r;
+    },
+    async undoLast() {
+      const r = await port.undoLast();
+      try { await localReceiver.undoLast(); } catch {}
+      return r;
+    },
+  };
+}
+
+function closeFramed() {
+  if (framedReceiver) { try { framedReceiver.destroy(); } catch {} framedReceiver = null; }
+  $('framed').removeAttribute('src');
+  $('framed-panel').hidden = true;
+  $('close-framed').hidden = true;
+  try { localStorage.removeItem(FRAME_KEY); } catch {}
+}
+
+// Mutually exclusive with the remote receiver: one of them drives at a time.
+function useFramed(url, proxyBase) {
+  url = (url || '').trim();
+  if (!url) return;
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+  proxyBase = (proxyBase || $('proxy-base').value || 'http://127.0.0.1:8124/').trim();
+  if (remoteChannel) { remoteChannel.close(); remoteChannel = null; try { localStorage.removeItem(WS_KEY); } catch {} }
+  setConnStatus('hidden');
+  if (framedReceiver) { try { framedReceiver.destroy(); } catch {} }
+
+  const frame = $('framed');
+  framedReceiver = createIframeReceiver(frame, { proxyBase });
+  framedReceiver.load(url);
+  $('framed-url').textContent = url;
+  $('framed-panel').hidden = false;
+  $('close-framed').hidden = false;
+  try { localStorage.setItem(FRAME_KEY, JSON.stringify({ url, proxyBase })); } catch {}
+
+  currentControl = alsoAdaptTheChat(framedReceiver);
+  $('drive-note').textContent = 'Driving the page in this window (' + url + ') + this window. No agent tasks in this mode.';
+  rebuildController();
+  if (unNote) { unNote(); unNote = null; }
+  wireNotes();
+}
+
 function useLocal() {
   if (remoteChannel) { remoteChannel.close(); remoteChannel = null; }
+  closeFramed();
   currentControl = localReceiver;
   try { localStorage.removeItem(WS_KEY); } catch {}
   setConnStatus('hidden');
@@ -177,6 +238,7 @@ function useLocal() {
 }
 function useRemote(url) {
   if (!url) return;
+  closeFramed(); // one driver at a time
   if (remoteChannel) remoteChannel.close();
   remoteChannel = websocketChannel(url);
   currentControl = remoteControl({ channel: remoteChannel });
@@ -414,6 +476,11 @@ async function generalAnswer(u) {
 // "play a podcast from spotify" goes nowhere.
 function fallbackHelp() {
   const base = 'I can adapt this page — try “bigger text”, “dark mode”, “high contrast”, or “read this” — and I’ll set up your profile if you tell me about your needs (“I’m blind”).';
+  // In iframe mode there is deliberately no agent (no CDP), so free-form
+  // requests have nowhere to go. Say that, rather than leaving them in silence.
+  if (framedReceiver) {
+    return 'I can’t run that here. With the page open in this window there’s no agent to hand it to — I can adapt the page and read it, but not carry out free-form requests. ' + base;
+  }
   if (!remoteChannel) {
     return 'Nothing is connected that could do that. I can only adapt this page and your profile right now — to run a request like that, connect an app first: Settings → Connect browser-harness. ' + base;
   }
@@ -491,6 +558,11 @@ function initSettings() {
   $('connect-remote').addEventListener('click', () => useRemote($('ws-url').value.trim()));
   $('use-local-harness').addEventListener('click', () => { $('ws-url').value = 'ws://127.0.0.1:9333'; useRemote('ws://127.0.0.1:9333'); });
 
+  // …or drive a page framed in this window (screen-reader-on-a-VM mode).
+  $('open-framed').addEventListener('click', () => { useFramed($('frame-url').value, $('proxy-base').value); toggleDrawer(false); });
+  $('close-framed').addEventListener('click', () => useLocal());
+  $('framed-close').addEventListener('click', () => useLocal());
+
   // Reset profile: forget the current user and clear every applied setting — a
   // reload gives a fresh receiver (no adaptations), an empty transcript, and no
   // profile, i.e. starting from scratch as no specific person.
@@ -528,9 +600,19 @@ async function boot() {
   initSettings();
   initVoiceInput();
 
-  // Reconnect to the receiver we were driving before a refresh, if any.
-  let savedWs = ''; try { savedWs = localStorage.getItem(WS_KEY) || ''; } catch {}
-  if (savedWs) useRemote(savedWs);
+  // Restore whatever we were driving before a refresh. A screen-reader tester
+  // reloads often, and re-typing the URL each time is the kind of friction this
+  // mode exists to remove. The two are mutually exclusive; the frame wins.
+  let savedFrame = null;
+  try { savedFrame = JSON.parse(localStorage.getItem(FRAME_KEY) || 'null'); } catch {}
+  if (savedFrame && savedFrame.url) {
+    $('frame-url').value = savedFrame.url;
+    if (savedFrame.proxyBase) $('proxy-base').value = savedFrame.proxyBase;
+    useFramed(savedFrame.url, savedFrame.proxyBase);
+  } else {
+    let savedWs = ''; try { savedWs = localStorage.getItem(WS_KEY) || ''; } catch {}
+    if (savedWs) useRemote(savedWs);
+  }
 
   $('composer-form').addEventListener('submit', (e) => { e.preventDefault(); handleTurn($('composer-input').value); });
   $('composer-input').addEventListener('keydown', onComposerKey); // Enter to send, Up/Down to recall history
