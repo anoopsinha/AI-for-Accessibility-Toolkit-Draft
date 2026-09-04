@@ -207,13 +207,16 @@ async function onboard({ uid, supportAreas, freeText, visionKind }) {
     const t = await remoteAdmin('POST', '/admin/tokens', { uid, label: 'onboarding' });
     if (t.status !== 200 || !t.body?.token) throw new Error('could not mint token (check TOOLKIT_URL / ADMIN_PASSWORD)');
     const token = t.body.token;
-    if (areas.length) await remoteLibrarian(token, 'setProfileField', ['supportAreas', areas]);
+    // Always write, like needs below: a re-onboard that says none has to
+    // clear these, or the profile keeps areas it no longer claims and
+    // anything re-deriving from them brings the needs straight back.
+    await remoteLibrarian(token, 'setProfileField', ['supportAreas', areas]);
     // Always write (even []) so a re-onboard clears stale needs — e.g. a profile
     // corrected from low-vision to blind must drop the old magnification needs.
     await remoteLibrarian(token, 'setProfileField', ['fields.needs', needs]);
-    if (kind) await remoteLibrarian(token, 'setProfileField', ['fields.visionKind', kind]);
+    await remoteLibrarian(token, 'setProfileField', ['fields.visionKind', kind || '']);
+    await remoteLibrarian(token, 'setProfileField', ['freeText', text]);
     if (text) {
-      await remoteLibrarian(token, 'setProfileField', ['freeText', text]);
       // Stable topic so a re-onboard UPSERTS this note (addNote upserts by
       // topic) instead of appending a duplicate every run.
       await remoteLibrarian(token, 'addNote', [text, { source: 'user-explicit', topic: 'self-description' }]);
@@ -221,11 +224,15 @@ async function onboard({ uid, supportAreas, freeText, visionKind }) {
   } else {
     const { host } = await localBits();
     const { librarian } = await host.getInstance(uid);
-    if (areas.length) await librarian.setProfileField('supportAreas', areas);
+    // All written unconditionally, for the reason the needs line already gives:
+    // a re-onboard has to clear what it no longer says. Left conditional, a
+    // profile keeps areas it does not claim, free text it has retracted, and a
+    // vision kind for an area no longer selected.
+    await librarian.setProfileField('supportAreas', areas);
     await librarian.setProfileField('fields.needs', needs); // always write — clears stale needs on re-onboard
-    if (kind) await librarian.setProfileField('fields.visionKind', kind);
+    await librarian.setProfileField('fields.visionKind', kind || '');
+    await librarian.setProfileField('freeText', text);
     if (text) {
-      await librarian.setProfileField('freeText', text);
       // Stable topic → re-onboard upserts (not appends) this note.
       await librarian.addNote(text, { source: 'user-explicit', topic: 'self-description' });
     }
@@ -251,7 +258,11 @@ async function profileConfig(uid) {
     const { librarian } = await host.getInstance(uid);
     profile = await librarian.getProfile();
   }
-  return { supportAreas: profile.supportAreas || [], freeText: profile.freeText || '' };
+  // visionKind too: the form has to show back the blind / low-vision answer,
+  // or the most consequential fact about how the page adapts silently resets
+  // on the next update.
+  return { supportAreas: profile.supportAreas || [], freeText: profile.freeText || '',
+           visionKind: (profile.fields && profile.fields.visionKind) || profile.visionKind || '' };
 }
 
 async function profileSummary(uid) {
