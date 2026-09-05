@@ -1,11 +1,4 @@
 
-8/24/26
-
-# Rearch-Experiment Branch
-
-https://github.com/anoopsinha/AI-for-Accessibility-Toolkit-Draft/tree/rearch-experiment
-
-Turn the toolkit to be platform agnostic repository: "A general, platform-agnostic toolkit for adding agentic accessibility to any app." with a new [README.md](https://github.com/anoopsinha/AI-for-Accessibility-Toolkit-Draft/blob/rearch-experiment/README.md)
 
 What does the toolkit do and why is it useful?  The core value proposition of the toolkit is:
 	* Collect accessibility needs from users into ability profiles 
@@ -26,8 +19,3 @@ Disabled user's experience in an app that uses the toolkit
 
 tldr:
 Capture a person's accessibility needs as a portable, consent-gated ability model; use an agent to turn plain-language needs into reusable skill recipes grounded in a catalog of fixes; and resolve those, deterministically, into a settings plan the developer's app applies — the same understanding rendering natively across web, XR, and mobile surfaces.
-
-## Also on this branch
-
-- **Controller** ([`controller/`](https://github.com/anoopsinha/AI-for-Accessibility-Toolkit-Draft/tree/rearch-experiment/controller)) — an *optional*, platform-neutral text/voice control surface a person uses to drive any app through a neutral `ControlPort` (a sibling of the toolkit, not part of the core). It renders itself per the operator's ability profile, works local or over a remote channel, and hands anything it can't parse to a task-capable app.
-- **Onboarding** ([`onboarding/`](https://github.com/anoopsinha/AI-for-Accessibility-Toolkit-Draft/tree/rearch-experiment/onboarding)) — a tiny example web service that captures a profile (deriving a screen-reader-appropriate baseline for blind users, magnification for low vision) and serves the Controller demo from the same port.
